@@ -1,0 +1,193 @@
+import matplotlib.pylab as plt
+from pylab import *                             #显示中文
+mpl.rcParams['font.sans-serif'] = ['SimHei']  #显示中文
+
+#画图中正确显示负数
+import matplotlib
+matplotlib.rcParams['axes.unicode_minus']=False
+
+#加载数据
+train_data=np.loadtxt('LoR_train.txt',delimiter=',')
+test_data=np.loadtxt('LoR_test.txt',delimiter=',')
+# test=test_data.copy();
+# for i in range(100):
+#     for j in range(2):
+#         test[i,j]=test[i,j]*(1+0.3*(2*np.random.random()-1.0))
+# test[::2,0]=test[::2,0]*0.9
+# test[::3,1]=test[::3,1]*0.5
+# np.savetxt('LoR_test1.txt',test,delimiter=',',)
+
+#提取数据
+train_X,train_y=train_data[:,:-1],train_data[:,-1]
+test_X,test_y=test_data[:,:-1],test_data[:,-1]
+
+
+#特征缩放
+train_X-=np.mean(train_X,0)
+train_X/=np.std(train_X,0,ddof=1)
+
+test_X-=np.mean(test_X,0)
+test_X/=np.std(test_X,0,ddof=1)
+
+#数据初始化
+m1=train_X.shape[0]
+train_X=np.c_[np.ones(m1),train_X]
+train_y=np.c_[train_y]
+
+m2=test_X.shape[0]
+test_X=np.c_[np.ones(m2),test_X]
+test_y=np.c_[test_y]
+
+#定义sigmoid函数,g(z)
+def sigmoid(x):
+    return 1.0/(1.0+np.exp(-x))
+
+# #画sigmoid函数
+# x=np.linspace(-10,10,500)  #在[-10，10]均分500个点
+# y=sigmoid(x)
+# plt.plot(x,y)
+# plt.scatter(0,sigmoid(0),c='r',marker='x')
+# plt.show()
+
+#定义模型
+def model(X,theta):
+    z=np.dot(X,theta)
+    h=sigmoid(z)
+    return h
+
+#定义代价函数
+def costFunction(h,y,R=0):
+    m=y.shape[0]
+    J = -1.0 / m * (np.dot(y.T, np.log(h)) + np.dot((1 - y).T, np.log(1 - h))) +R   #带正则化的代价函数
+    return J
+
+#定义梯度下降
+def gradDes(X,y,alpha=0.1,lamda=0.0,iter_num=15000):
+    m,n=X.shape   #样本数m，特征数n
+    theta=np.zeros((n,1))  #初始化theta
+    J_history=np.zeros(iter_num)   #初始化代价函数值
+
+    #开始梯度下降
+    for i in range(iter_num):
+        h = model(X, theta)  # 预测值
+
+        #正则化计算
+        theta_r=theta.copy()   #theta_r和theta,指向不同的地址，若theta_r=theta指向同一个地址
+        theta_r[0,0]=0.0       #theta0不参加正则化，所以，设置为0.0
+        R = lamda / (2.0 * m) * np.dot(theta_r.T, theta_r)  # L2正则化项R
+
+        J_history[i]=costFunction(h,y,R)   #计算代价值
+
+        deltatheta=1.0/m*np.dot(X.T,(h-y))+lamda/m*theta_r  #计算带正则化的deltatheta
+
+        theta-=alpha*deltatheta   #更新theta
+
+    return J_history,theta
+
+#定义准确率函数score
+def score(X,y,theta):
+    m=X.shape[0]  #样本个数
+    count=0
+
+    for i in range(m):
+        h=model(X[i],theta)
+        if (bool(np.where(h>=0.5,1,0))==bool(y[i])):
+            count+=1
+    return count/m
+
+#定义预测结果函数y_predict
+def y_predict(X,theta,threshold=0.5):
+    h = model(X, theta)
+    y_predict = [1 if x >= threshold else 0 for x in h]
+    return y_predict
+
+#定义数据散点图和分界线函数
+def showResult(train_X,train_y,test_X,test_y,lamda=0):
+
+    # 无正则化项时执行梯度下降(lamda=0)
+    J_history, theta = gradDes(train_X, train_y)
+    print('无正则化时theta=', theta)
+
+    # 有正则化项时执行梯度下降
+    J_history_r, theta_r = gradDes(train_X, train_y, lamda=lamda)
+    print('有正则化时theta=', theta_r)
+
+    #对训练集和测试集的数据进行预测
+    print('(无正则)训练集预测结果y_predict=', y_predict(train_X, theta))
+    print('(无正则)测试集预测结果y_predict=', y_predict(test_X, theta))
+    print('(有正则)训练集预测结果y_predict=', y_predict(train_X, theta_r))
+    print('(有正则)测试集预测结果y_predict=', y_predict(test_X, theta_r))
+
+    #计算并比较准确率
+    train_score_0 = score(train_X, train_y, theta)
+    train_score_r = score(train_X, train_y, theta_r)
+    test_score_0 = score(test_X, test_y, theta)
+    test_score_r = score(test_X, test_y, theta_r)
+    print('(无正则化)训练集准确率=', train_score_0 * 100, '%')
+    print('(无正则化)测试集准确率=', test_score_0 * 100, '%')
+    print('(有正则化)训练集准确率=', train_score_r * 100, '%')
+    print('(有正则化)测试集准确率=', test_score_r * 100, '%')
+
+    # 图形展示结果
+    plt.figure('数据集及回归直线', figsize=(25, 25))
+
+    # 画出正则化前后代价曲线比较图
+    plt.subplot(2, 1, 1)
+    plt.title('正则化前后代价曲线比较图')
+    plt.plot(J_history, 'r', label='lamda=0')
+    plt.plot(J_history_r, 'g', label='lamda=' + str(lamda))
+    plt.xlabel('迭代次数')
+    plt.ylabel('代价')
+    plt.legend(loc='upper right', shadow=True, facecolor='0.9')
+
+    #判断特征个数是否为2
+    m,n=train_X.shape
+    if (n!=3):
+        print('n!=3,不能画图')
+        return 1
+
+    # 画训练集的散点图
+    plt.subplot(2, 2, 3)
+    plt.title('训练集: 准确率=' + str(round(train_score_0*100, 2)) +
+              '%(lamda=0), 准确率=' + str(round(train_score_r*100, 2))+'%(lamda=' +str(lamda) +')')
+    plt.scatter(train_X[train_y[:, 0] == 0, 1], train_X[train_y[:, 0] == 0, 2], c='purple')
+    plt.scatter(train_X[train_y[:, 0] == 1, 1], train_X[train_y[:, 0] == 1, 2], marker='x')
+
+    # 画训练集正则化前后的分界线
+    min_x, max_x = min(train_X[:, 1]), max(train_X[:, 1])  # 求x1(横坐标)最小值，最大值
+    min_x_y_0, max_x_y_0 = -(theta[0] + theta[1] * min_x) / theta[2], \
+                       -(theta[0] + theta[1] * max_x) / theta[2]  # 对应的x2(纵坐标)值
+
+    min_x_y_r, max_x_y_r = -(theta_r[0] + theta_r[1] * min_x) / theta_r[2], \
+                           -(theta_r[0] + theta_r[1] * max_x) / theta_r[2]  # 对应的x2(纵坐标)值
+
+    plt.plot([min_x, max_x], [min_x_y_0, max_x_y_0], 'r',label='lamda=0')  #无正则化分界线
+    plt.plot([min_x, max_x], [min_x_y_r, max_x_y_r], 'g',label='lamda=' + str(lamda))  #有正则化分界线
+
+    plt.legend(loc='lower left', shadow=True, facecolor='0.9')
+
+    # 画测试集的散点图
+    plt.subplot(2, 2, 4)
+    plt.title('测试集: 准确率=' + str(round(test_score_0*100, 2)) +
+              '%(lamda=0), 准确率=' + str(round(test_score_r*100, 2))+ '%(lamda=' +str(lamda) + ')')
+    plt.scatter(test_X[train_y[:, 0] == 0, 1], test_X[train_y[:, 0] == 0, 2], c='purple')
+    plt.scatter(test_X[train_y[:, 0] == 1, 1], test_X[train_y[:, 0] == 1, 2], marker='x')
+
+
+    # 画测试集正则化前后的分界线
+    min_x, max_x = min(test_X[:, 1]), max(test_X[:, 1])  # 求x1(横坐标)最小值，最大值
+    min_x_y_0, max_x_y_0 = -(theta[0] + theta[1] * min_x) / theta[2], \
+                           -(theta[0] + theta[1] * max_x) / theta[2]  # 对应的x2(纵坐标)值
+
+    min_x_y_r, max_x_y_r = -(theta_r[0] + theta_r[1] * min_x) / theta_r[2], \
+                           -(theta_r[0] + theta_r[1] * max_x) / theta_r[2]  # 对应的x2(纵坐标)值
+
+    plt.plot([min_x, max_x], [min_x_y_0, max_x_y_0], 'r',label='lamda=0')  # 无正则化分界线
+    plt.plot([min_x, max_x], [min_x_y_r, max_x_y_r], 'g',label='lamda=' + str(lamda))  # 有正则化分界线
+
+    plt.legend(loc='lower left', shadow=True, facecolor='0.9')
+
+    plt.show()
+
+# 使用X1，X2两组特征，分别画出正则化系数lamda=0和lamda=3.3时，测试集散点图和分界线
+showResult(train_X,train_y,test_X,test_y,lamda=3.3)
